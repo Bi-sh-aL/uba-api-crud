@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1,
+    "firstName": "Bishal",
+    "lastName": "Shrestha",
+    "email": "bishal456@gmail.com",
+    "password": "Kumar@1234"
+  },
+  {
+    "id": 2,
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "doe.john@gmail.com",
+    "password": "Password@156"
+  },
+  {
+    "id": 3,
+    "firstName": "Joey",
+    "lastName": "Tribbiani",
+    "email": "joey@gmail.com",
+    "password": "Password@156"
+  },
+  {
+    "id": 4,
+    "firstName": "Krishna",
+    "lastName": "Pandit",
+    "email": "panditkrishna@gmail.com",
+    "password": "Password@156"
+  },
+  {
+    "id": 5,
+    "firstName": "Kumar",
+    "lastName": "Ghale",
+    "email": "kumar.4554@gmail.com",
+    "password": "Password@156"
+  },
+  {
+    "id": 6,
+    "firstName": "Ushimaru",
+    "lastName": "Shimotsuki",
+    "email": "su3354@gmail.com",
+    "password": "Password@156"
+  },
+  {
+    "id": 7,
+    "firstName": "Mark",
+    "lastName": "Henry",
+    "email": "henry45@gmail.com",
+    "password": "Password@156"
+  },
+  {
+    "id": 8,
+    "firstName": "Ashol",
+    "lastName": "Karki",
+    "email": "karkiashol@gmail.com",
+    "password": "Password@156"
+  }
+]
