@@ -4,7 +4,7 @@ import { expressMiddleware } from "@apollo/server/express4";
 import { typeDefs, resolvers } from "./gqlSchema/schema.ts";
 import userRoutes from "./router/userRoutes";
 
-const app = express();
+export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 // Middleware for parsing JSON bodies
@@ -19,7 +19,7 @@ async function startServer(){
     typeDefs,
     resolvers,
   });
-  
+
   await server.start();
 
   app.use("/graphql", expressMiddleware(server));

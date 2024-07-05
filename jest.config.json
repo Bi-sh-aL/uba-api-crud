@@ -1,0 +1,14 @@
+{
+  "transform": {
+    "^.+\\.tsx?$": ["ts-jest", {
+      "useESM": true
+    }]
+  },
+  "testEnvironment": "node",
+  "moduleFileExtensions": ["js", "jsx", "ts", "tsx"],
+  "extensionsToTreatAsEsm": [".ts"],
+  "testMatch": ["**/__tests__/**/*.test.ts", "**/?(*.)+(spec|test).ts"],
+  "collectCoverage": true,
+  "coverageReporters": ["html", "text"],
+  "coverageDirectory": "coverage"
+}

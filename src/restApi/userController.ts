@@ -11,7 +11,7 @@ export interface User {
   password: string;
 }
 
-const users: User[] = userData as User[];
+export const users: User[] = userData as User[];
 
 export const getUsers = (req: Request, res: Response) => {
   return res.json(users);
@@ -21,7 +21,7 @@ export const getUserById = (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const user = users.find((user) => user.id === id);
   if (user) {
-    return res.status(201).json(user);
+    return res.status(200).json(user);
   } else {
     return res.status(404).json({ message: "404 User not found" });
   }
@@ -52,6 +52,7 @@ export const createUser = async (req: Request, res: Response) => {
       .status(201)
       .json({ status: "User added successfully", id: newUser.id });
   } catch (error) {
+    console.error("Error writing file:", error);
     return res.status(500).json({ status: "Failed to add user." });
   }
 };
@@ -71,7 +72,7 @@ export const updateUser = async (req: Request, res: Response) => {
         return res.status(409).json({ status: "Email already exists." });
       }
       await fs.writeFile(
-        path.join(__dirname, "Mock_Data.json"),
+        path.join("Mock_Data.json"),
         JSON.stringify(users, null, 2)
       );
       return res
