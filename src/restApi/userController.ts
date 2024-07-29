@@ -3,11 +3,14 @@ import { AppDataSource } from "../db.config";
 import { User } from "../entity/User";
 import bcrypt from "bcrypt";
 import { generateToken } from "../middleware/auth";
+import { Role } from "../entity/Role";
 
+
+//Get all users
 export const getUsers = async (req: Request, res: Response) => {
   try {
     const userRepository = AppDataSource.getRepository(User);
-    const users = await userRepository.find();
+    const users = await userRepository.find({ relations: ["role", "roles.permission" ]});
     return res.json(users);
   } catch (error) {
     console.error("Error fetching users:", error);
@@ -15,11 +18,12 @@ export const getUsers = async (req: Request, res: Response) => {
   }
 };
 
+//Get user by id
 export const getUserById = async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   try {
     const userRepository = AppDataSource.getRepository(User);
-    const user = await userRepository.findOneBy({ id });
+    const user = await userRepository.findOne({where: { id }, relations: ["role", "roles.permission" ]});
     if (user) {
       return res.status(200).json(user);
     } else {
@@ -31,29 +35,52 @@ export const getUserById = async (req: Request, res: Response) => {
   }
 };
 
+//Create a new user
 export const createUser = async (req: Request, res: Response) => {
-  const body = req.body;
+  
   try {
     const userRepository = AppDataSource.getRepository(User);
-
-    const existingUser = await userRepository.findOne({where: { email: body.email }});
-    if (existingUser) {
+    const roleRepository = AppDataSource.getRepository(Role);
+    const body = req.body;
+    const role = body.role;
+    const existingEmail = await userRepository.findOne({where: { email: body.email }});
+    const existingUsername = await userRepository.findOne({where: { username: body.username }});
+    if (existingEmail) {
       return res.status(409).json({ status: "Email already exists." });
+    }
+    if (existingUsername) {
+      return res.status(409).json({ status: "Username already exists." });
     }
 
     const hashedPassword = await bcrypt.hash(body.password, 10);
+    
+    const roleEntities= await Promise.all(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      role.map(async (value: { id: any; }) => {
+        const roleEntity = await roleRepository.findOne({ where: {id: value.id }});
+        if (!roleEntity) {
+          throw new Error(`Role with id ${value.id} not found`);
+        }
+        return roleEntity;
+      })
+    );
+
     const newUser = userRepository.create({
       firstName: body.firstName,
       lastName: body.lastName,
+      username: body.username,
+      mobileNumber: body.mobileNumber,
       email: body.email,
-      password: hashedPassword
+      password: hashedPassword,
+      role: roleEntities
     });
     
     await userRepository.save(newUser);
 
     const payload = {
       id: newUser.id,
-      email: newUser.email
+      email: newUser.email,
+      role: roleEntities
     };
 
     const token = generateToken(payload);
@@ -67,17 +94,25 @@ export const createUser = async (req: Request, res: Response) => {
   }
 };
 
+//Update exiting user
 export const updateUser = async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const body = req.body;
   try {
     const userRepository = AppDataSource.getRepository(User);
-    const user = await userRepository.findOneBy({ id });
+    const user = await userRepository.findOne({where: { id }, relations: ["role"]});
     if (user) {
       if (body.email && body.email !== user.email) {
         const existingUser = await userRepository.findOneBy({ email: body.email });
         if (existingUser) {
           return res.status(409).json({ status: "Email already exists." });
+        }
+      }
+
+      if (body.username && body.username !== user.username) {
+        const existingUser = await userRepository.findOneBy({ username: body.username });
+        if (existingUser) {
+          return res.status(409).json({ status: "Username already exists." });
         }
       }
 
@@ -98,11 +133,12 @@ export const updateUser = async (req: Request, res: Response) => {
   }
 };
 
+//Delete user
 export const deleteUser = async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   try {
     const userRepository = AppDataSource.getRepository(User);
-    const user = await userRepository.findOneBy({ id });
+    const user = await userRepository.findOne({where: { id }});
     if (user) {
       await userRepository.remove(user);
       return res.status(204).json({ status: `User with id ${id} deleted successfully.` });
@@ -115,11 +151,12 @@ export const deleteUser = async (req: Request, res: Response) => {
   }
 };
 
+//Handle user login
 export const userLogin = async (req: Request, res: Response) => {
   const { email, password } = req.body;
   try {
     const userRepository = AppDataSource.getRepository(User);
-    const user = await userRepository.findOne({ where: { email } });
+    const user = await userRepository.findOne({ where: { email }, relations: ["role", "role.permissions"] });
     
     if (!user) {
       return res.status(401).json({ status: "Invalid email or password" });
@@ -133,7 +170,8 @@ export const userLogin = async (req: Request, res: Response) => {
 
     const payload = {
       id: user.id,
-      email: user.email
+      email: user.email,
+      role: user.role.map((role) => role.name),
     };  
 
     const token = generateToken(payload);

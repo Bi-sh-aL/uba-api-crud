@@ -20,7 +20,7 @@ beforeAll(async () => {
   };
 
   // Spy on the getRepository method and return the mock repository
-  jest.spyOn(testDataSource, 'getRepository').mockReturnValue(mockRepository);
+  jest.spyOn(testDataSource, "getRepository").mockReturnValue(mockRepository);
 
   // Initialize your Express app here
   app = (await import("../router/userRoutes")).default;

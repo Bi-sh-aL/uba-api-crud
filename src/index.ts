@@ -3,6 +3,7 @@ import { ApolloServer } from "@apollo/server";
 import { expressMiddleware } from "@apollo/server/express4";
 import { typeDefs, resolvers } from "./gqlSchema/schema.ts";
 import userRoutes from "./router/userRoutes";
+import cors from "cors";
 
 export const app = express();
 const PORT = Number(process.env.PORT) || 8000;
@@ -10,6 +11,8 @@ const PORT = Number(process.env.PORT) || 8000;
 // Middleware for parsing JSON bodies
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+
+app.use(cors());
 
 // Rest API routes
 app.use("/", userRoutes);

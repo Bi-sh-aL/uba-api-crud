@@ -2,6 +2,8 @@ import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { User } from "./entity/User";
 import { Internship } from "./entity/Internship";
+import { Role } from "./entity/Role";
+import { Permission } from "./entity/Permission";
 
 export const AppDataSource = new DataSource({
   type: "mysql",
@@ -10,10 +12,10 @@ export const AppDataSource = new DataSource({
   username: "root",
   password: "Password@123",
   database: "uba_db",
-  entities: [User, Internship],
+  entities: [User, Internship, Role, Permission],
   migrationsTableName: "custom_migration_table",
   migrations: ["src/migration/*.ts"],
-  synchronize: false,
+  synchronize: true,
   logging: true,
   
 });
