@@ -6,7 +6,11 @@
     "start": "ts-node-dev src/index.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "test": "jest"
+    "test": "jest",
+    "typeorm": "node --require ts-node/register ./node_modules/typeorm/cli.js",
+    "migration:generate": "npm run typeorm migration:generate -- -d ./src/migration -n migrationName",
+    "migration:run": "npm run typeorm migration:run",
+    "migration:revert": "npm run typeorm migration:revert -- -d ./src/migration"
   },
   "keywords": [],
   "author": "",
@@ -16,15 +20,22 @@
     "@apollo/server": "^4.10.4",
     "apollo-server-errors": "^3.3.1",
     "babel": "^6.23.0",
+    "bcrypt": "^5.1.1",
     "express": "^4.19.2",
     "graphql": "^16.9.0",
-    "joi": "^17.13.3"
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.10.3",
+    "reflect-metadata": "^0.2.2",
+    "typeorm": "^0.3.20"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.24.7",
+    "@types/bcrypt": "^5.0.2",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.12",
     "@types/joi": "^17.2.3",
+    "@types/jsonwebtoken": "^9.0.6",
     "@types/supertest": "^6.0.2",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",

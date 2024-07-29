@@ -5,14 +5,15 @@ import { typeDefs, resolvers } from "./gqlSchema/schema.ts";
 import userRoutes from "./router/userRoutes";
 
 export const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 8000;
 
 // Middleware for parsing JSON bodies
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 // Rest API routes
-app.use("/api", userRoutes);
+app.use("/", userRoutes);
+
 
 async function startServer(){
   const server = new ApolloServer({

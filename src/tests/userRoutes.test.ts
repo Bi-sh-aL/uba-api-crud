@@ -1,233 +1,97 @@
-import { describe, it, expect, beforeEach, jest } from "@jest/globals";
-import request from "supertest";
-import express from "express";
-import * as userController from "../restApi/userController.ts";
-import fs from "fs/promises";
-import { typeDefs, resolvers } from "../gqlSchema/schema";
-import { ApolloServer } from "@apollo/server";
-import { expressMiddleware } from "@apollo/server/express4";
+import { Router } from "express";
+import { AppDataSource } from "../db.config";
+import { User } from "../entity/User";
+import { setupTestDataSource } from "./setup";
+import { it, beforeAll, afterAll, describe, expect } from "@jest/globals";
+import jest from "jest";
 
-const app = express();
-app.use(express.json());
+let app: Router;
 
-app.get("/users", userController.getUsers);
-app.get("/users/:id", userController.getUserById);
-app.post("/users", userController.createUser);
-app.patch("/users/:id", userController.updateUser);
-app.delete("/users/:id", userController.deleteUser);
+beforeAll(async () => {
+  const testDataSource = await setupTestDataSource();
 
-const createTestServer = () => {
-  const server = new ApolloServer({
-    typeDefs,
-    resolvers,
-  });
+  console.log(testDataSource);
+  
+  // Create a mock repository object
+  const mockRepository = {
+    find: jest.fn(),
+    save: jest.fn(),
+    // Add other methods as needed
+  };
 
-  return server.start().then(() => {
-    app.use("/graphql", expressMiddleware(server));
-    return app;
-  });
-};
+  // Spy on the getRepository method and return the mock repository
+  jest.spyOn(testDataSource, 'getRepository').mockReturnValue(mockRepository);
 
-jest.mock("fs/promises");
-
-describe("RestApi", () => {
-  let users: userController.User[];
-
-  beforeEach(() => {
-    // Reset users array and mock fs
-    users = [
-      {
-        id: 1,
-        firstName: "John",
-        lastName: "Doe",
-        email: "john@example.com",
-        password: "Password123!",
-      },
-      {
-        id: 2,
-        firstName: "Jane",
-        lastName: "Doe",
-        email: "jane@example.com",
-        password: "Password456!",
-      },
-    ];
-    userController.users.splice(0, userController.users.length, ...users);
-    jest.resetAllMocks();
-
-    // Mock fs.writeFile to resolve without error
-    jest.spyOn(fs, "writeFile").mockResolvedValue();
-  });
-
-  it("should return all users", async () => {
-    const res = await request(app).get("/users");
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual(users);
-  });
-
-  it("should return a user by ID", async () => {
-    const res = await request(app).get("/users/1");
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual(users[0]);
-  });
-
-  it("should return 404 for a non-existing user ID", async () => {
-    const res = await request(app).get("/users/999");
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ message: "404 User not found" });
-  });
-
-  it("should create a new user", async () => {
-    const newUser = {
-      firstName: "Alice",
-      lastName: "Smith",
-      email: "alice@example.com",
-      password: "Password789!",
-    };
-    const res = await request(app).post("/users").send(newUser);
-    expect(res.status).toBe(201);
-    expect(res.body).toEqual({ status: "User added successfully", id: 3 });
-    expect(userController.users.length).toBe(3);
-    expect(userController.users[2]).toMatchObject(newUser);
-  });
-
-  it("should not create a user with a duplicate email", async () => {
-    const duplicateUser = {
-      firstName: "Alice",
-      lastName: "Smith",
-      email: "john@example.com",
-      password: "Password789!",
-    };
-    const res = await request(app).post("/users").send(duplicateUser);
-    expect(res.status).toBe(409);
-    expect(res.body).toEqual({ status: "Email already exists." });
-  });
-
-  it("should update an existing user", async () => {
-    const updatedUser = { firstName: "Johnny" };
-    const res = await request(app).patch("/users/1").send(updatedUser);
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      status: "User with id 1 updated successfully.",
-    });
-    expect(userController.users[0].firstName).toBe("Johnny");
-  });
-
-  it("should not update a user with a duplicate email", async () => {
-    const updatedUser = { email: "jane@example.com" };
-    const res = await request(app).patch("/users/1").send(updatedUser);
-    expect(res.status).toBe(409);
-    expect(res.body).toEqual({ status: "Email already exists." });
-  });
-
-  it("should delete an existing user", async () => {
-    const res = await request(app).delete("/users/1");
-    expect(res.status).toBe(204);
-    expect(userController.users.length).toBe(1);
-  });
-
-  it("should return 404 for deleting a non-existing user", async () => {
-    const res = await request(app).delete("/users/999");
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ message: "404 User not found" });
-  });
+  // Initialize your Express app here
+  app = (await import("../router/userRoutes")).default;
 });
 
-describe("GraphQL API", () => {
-  let app: express.Express;
+afterAll(async () => {
+  const testDataSource = AppDataSource.getRepository.mock.results[0].value.manager.connection;
+  await testDataSource.destroy();
+});
 
-  beforeEach(async () => {
-    app = await createTestServer();
-  });
-  it("should return a list of users", async () => {
-    const query = `
-      query {
-        users {
-          edges {
-            node {
-              id
-              firstName
-              lastName
-              email
-              password
-            }
-          }
-          pageInfo {
-            endCursor
-            hasNextPage
-          }
-        }
-      }
-    `;
-    const res = await request(app)
-      .post("/graphql")
-      .send({ query });
-    expect(res.body.data).toBeDefined();
-    expect(res.body.data.users.edges.length).toBeGreaterThan(0);
+
+describe("User Controller", () => {
+  let userId: number;
+
+  it("should create a new user", async () => {
+    const response = await request(app)
+      .post("/users")
+      .send({
+        firstName: "John",
+        lastName: "Doe",
+        email: "john.doe@example.com",
+        password: "password123",
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.status).toBe("User added successfully");
+
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOneBy({ email: "john.doe@example.com" });
+    expect(user).toBeDefined();
+    expect(user.email).toBe("john.doe@example.com");
+    userId = user.id;
   });
 
-  it("should return a user by ID", async () => {
-    const query = `
-      query {
-        user(id: "1") {
-          id
-          firstName
-          lastName
-          email
-        }
-      }
-    `;
-    const res = await request(app)
-      .post("/graphql")
-      .send({ query });
-    expect(res.body.data).toBeDefined();
-    expect(res.body.data.user).toHaveProperty("id", "1");
+  it("should get all users", async () => {
+    const response = await request(app).get("/users");
+
+    expect(response.status).toBe(200);
+    expect(response.body.length).toBeGreaterThan(0);
   });
 
-  it("should return an error for a non-existing user ID", async () => {
-    const query = `
-      query {
-        user(id: "999") {
-          id
-          firstName
-          lastName
-          email
-          password
-        }
-      }
-    `;
-    const res = await request(app)
-      .post("/graphql")
-      .send({ query });
-    expect(res.body.errors).toBeDefined();
-    expect(res.body.errors[0].message).toBe("User not found");
+  it("should get a user by ID", async () => {
+    const response = await request(app).get(`/users/${userId}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.id).toBe(userId);
   });
 
-  it("should handle pagination correctly", async () => {
-    const query = `
-      query {
-        users(first: 1) {
-          edges {
-            node {
-              id
-              firstName
-              lastName
-              email
-              password
-            }
-          }
-          pageInfo {
-            endCursor
-            hasNextPage
-          }
-        }
-      }
-    `;
-    const res = await request(app)
-      .post("/graphql")
-      .send({ query });
-    expect(res.body.data).toBeDefined();
-    expect(res.body.data.users.edges.length).toBe(1);
-    expect(res.body.data.users.pageInfo).toHaveProperty("endCursor");
-    expect(res.body.data.users.pageInfo.hasNextPage).toBe(true);
+  it("should update a user", async () => {
+    const response = await request(app)
+      .put(`/users/${userId}`)
+      .send({
+        firstName: "Jane",
+        lastName: "Doe",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe(`User with id ${userId} updated successfully`);
+
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOneBy({ id: userId });
+    expect(user.firstName).toBe("Jane");
+  });
+
+  it("should delete a user", async () => {
+    const response = await request(app).delete(`/users/${userId}`);
+
+    expect(response.status).toBe(204);
+
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOneBy({ id: userId });
+    expect(user).toBeUndefined();
   });
 });
