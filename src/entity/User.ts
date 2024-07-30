@@ -16,7 +16,7 @@ export class User {
   @Column("varchar")
     username: string;  
 
-  @Column()
+  @Column("varchar")
     mobileNumber: string;  
 
   @Column("varchar")
@@ -28,7 +28,7 @@ export class User {
   // @OneToMany(() => Internship, (internship) => internship.user, {cascade: true, eager: true})
   //   internships: Internship[];
 
-  @ManyToMany(() => Role)
+  @ManyToMany(() => Role, (role) => role.users)
   @JoinTable({
     name: "user_roles",
     joinColumn: {

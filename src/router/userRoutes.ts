@@ -4,15 +4,15 @@ import validate from "../middleware/validate";
 import { createUserSchema, updateUserSchema } from "../validator/userValidator";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 require("dotenv").config();
-import { roleAuthorize, jwtauth } from "../middleware/auth";
+import { jwtauth, checkPermission } from "../middleware/auth";
 
 import { createInternship } from "../restApi/intern";
 
-const router = Router();
+const router: Router = Router();
 
 
 //routes to get all users
-router.get("/users", jwtauth, roleAuthorize("Admin"), getUsers);
+router.get("/users", jwtauth, checkPermission("get_users"), getUsers);
 
 //route to create a new user
 router.post("/users", validate(createUserSchema), createUser);
@@ -24,7 +24,7 @@ router.get("/users/:id", jwtauth,  getUserById);
 router.patch("/users/:id", jwtauth, validate(updateUserSchema), updateUser);
 
 //route to delete a user
-router.delete("/users/:id", jwtauth, roleAuthorize("Admin"), deleteUser);
+router.delete("/users/:id", jwtauth, checkPermission("delete_users"), deleteUser);
 
 //route for login
 router.post("/users/login", userLogin);

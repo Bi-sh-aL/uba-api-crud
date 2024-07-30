@@ -6,9 +6,9 @@ export class Permission {
     @PrimaryGeneratedColumn()   
       id: number;
 
-    @Column()
+    @Column("varchar")
       name: string;   
 
     @ManyToMany(() => Role, (role) => role.permissions) 
-      roles: Role[];
+      role: Role[];
 }

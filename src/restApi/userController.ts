@@ -10,7 +10,7 @@ import { Role } from "../entity/Role";
 export const getUsers = async (req: Request, res: Response) => {
   try {
     const userRepository = AppDataSource.getRepository(User);
-    const users = await userRepository.find({ relations: ["role", "roles.permission" ]});
+    const users = await userRepository.find();
     return res.json(users);
   } catch (error) {
     console.error("Error fetching users:", error);
@@ -23,7 +23,7 @@ export const getUserById = async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   try {
     const userRepository = AppDataSource.getRepository(User);
-    const user = await userRepository.findOne({where: { id }, relations: ["role", "roles.permission" ]});
+    const user = await userRepository.findOne({where: { id }, relations: ["role", "role.permission" ]});
     if (user) {
       return res.status(200).json(user);
     } else {

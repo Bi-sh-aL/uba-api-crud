@@ -47,4 +47,5 @@ export const addPermissionToRole = async (req: Request, res: Response) => {
   role.permissions = permission;
 
   await roleRepository.save(role);
+  return res.status(200).json({ status: "Permissions added to role successfully" });
 };

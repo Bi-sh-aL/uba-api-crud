@@ -22,7 +22,8 @@ const createUserSchema = Joi.object({
   }),
   username: Joi.string().regex(usernameRegex).required().messages({
     "string.pattern.base": "Username must be alphanumeric and between 3 to 30 characters."
-  })
+  }),
+  role: Joi.array().items(Joi.object({id: Joi.number().required()}))
 });
 
 const updateUserSchema = Joi.object({

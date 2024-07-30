@@ -2,7 +2,7 @@ import express from "express";
 import { ApolloServer } from "@apollo/server";
 import { expressMiddleware } from "@apollo/server/express4";
 import { typeDefs, resolvers } from "./gqlSchema/schema.ts";
-import userRoutes from "./router/userRoutes";
+import Routes from "./router/indexRoutes.ts";
 import cors from "cors";
 
 export const app = express();
@@ -15,7 +15,8 @@ app.use(express.json());
 app.use(cors());
 
 // Rest API routes
-app.use("/", userRoutes);
+app.use("/", Routes);
+
 
 
 async function startServer(){

@@ -8,7 +8,7 @@ export class Role{
     @PrimaryGeneratedColumn()
       id: number; 
 
-    @Column()
+    @Column("varchar")
       name: string;   
 
     @ManyToMany(() => User, (user) => user.role)

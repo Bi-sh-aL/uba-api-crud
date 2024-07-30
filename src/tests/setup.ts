@@ -1,30 +1,11 @@
-import { DataSource } from "typeorm";
-import { User } from "../entity/User";
-import { Internship } from "../entity/Internship";
-import jest from "jest";
+import "reflect-metadata";
+import { AppDataSource } from "../db.config";
+import { beforeAll, afterAll } from "vitest";
 
-export const setupTestDataSource = async () => {
-  const testDataSource = new DataSource({
-    type: "mysql",
-    host: "localhost",
-    port: 3306,
-    username: "root",
-    password: "Password@123",
-    database: "uba_db",
-    entities: [User, Internship],
-    synchronize: true,
-    logging: false,
-    dropSchema: true,
-  });
+beforeAll(async () => {
+  await AppDataSource.initialize();
+});
 
-  await testDataSource.initialize();
-  return testDataSource;
-};
-
-jest.mock("../db.config", () => ({
-  AppDataSource: {
-    getRepository: jest.fn(),
-  },
-}));
-
-
+afterAll(async () => {
+  await AppDataSource.destroy();
+});

@@ -1,3 +1,4 @@
+import "reflect-metadata";
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class PosTRefactoring1721636350599 implements MigrationInterface {
