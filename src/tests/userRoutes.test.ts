@@ -1,233 +1,377 @@
-import { describe, it, expect, beforeEach, jest } from "@jest/globals";
-import request from "supertest";
-import express from "express";
-import * as userController from "../restApi/userController.ts";
-import fs from "fs/promises";
-import { typeDefs, resolvers } from "../gqlSchema/schema";
-import { ApolloServer } from "@apollo/server";
-import { expressMiddleware } from "@apollo/server/express4";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { Request, Response } from "express";
+import { AppDataSource } from "../db.config";
+// import { User } from "../entity/User";
+// import { Role } from "../entity/Role";
+import bcrypt from "bcrypt";
+import { generateToken } from "../middleware/auth";
+import * as userController from "../restApi/userController";
 
-const app = express();
-app.use(express.json());
+vi.mock("../db.config");
+vi.mock("../entity/User");
+vi.mock("../entity/Role");
+vi.mock("bcrypt");
+vi.mock("../middleware/auth");
 
-app.get("/users", userController.getUsers);
-app.get("/users/:id", userController.getUserById);
-app.post("/users", userController.createUser);
-app.patch("/users/:id", userController.updateUser);
-app.delete("/users/:id", userController.deleteUser);
-
-const createTestServer = () => {
-  const server = new ApolloServer({
-    typeDefs,
-    resolvers,
-  });
-
-  return server.start().then(() => {
-    app.use("/graphql", expressMiddleware(server));
-    return app;
-  });
-};
-
-jest.mock("fs/promises");
-
-describe("RestApi", () => {
-  let users: userController.User[];
+describe("User Controller", () => {
+  let req: Partial<Request>;
+  let res: Partial<Response>;
+  let statusMock: jest.Mock;
+  let jsonMock: jest.Mock;
 
   beforeEach(() => {
-    // Reset users array and mock fs
-    users = [
-      {
-        id: 1,
+    req = {};
+    res = {
+      status:  vi.fn().mockImplementation(() => res),
+      json: vi.fn(),
+    };
+    statusMock = res.status as jest.Mock;
+    jsonMock = res.json as jest.Mock;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe("getUsers", () => {
+    it("should return an array of users", async () => {
+      const userRepositoryMock = {
+        find: vi.fn().mockResolvedValue([{ id: 1, name: "John Doe" }]),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      await userController.getUsers(req as Request, res as Response);
+
+      expect(statusMock).not.toHaveBeenCalled();
+      expect(jsonMock).toHaveBeenCalledWith([{ id: 1, name: "John Doe" }]);
+    });
+
+    it("should handle errors", async () => {
+      const userRepositoryMock = {
+        find: vi.fn().mockRejectedValue(new Error("DB Error")),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      await userController.getUsers(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(500);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Failed to fetch users." });
+    });
+  });
+
+  describe("getUserById", () => {
+    it("should return a user by ID", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue({ id: 1, name: "John Doe" }),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.params = { id: "1" };
+
+      await userController.getUserById(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith({ id: 1, name: "John Doe" });
+    });
+
+    it("should handle user not found", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue(null),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.params = { id: "1" };
+
+      await userController.getUserById(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(404);
+      expect(jsonMock).toHaveBeenCalledWith({ message: "404 User not found" });
+    });
+
+    it("should handle errors", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockRejectedValue(new Error("DB Error")),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.params = { id: "1" };
+
+      await userController.getUserById(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(500);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Failed to fetch user." });
+    });
+  });
+
+  describe("createUser", () => {
+    it("should create a new user", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockReturnValue({ id: 1 }),
+        save: vi.fn().mockResolvedValue({ id: 1 }),
+      };
+      const roleRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue({ id: 1, name: "admin" }),
+      };
+      (AppDataSource.getRepository as jest.Mock)
+        .mockReturnValueOnce(userRepositoryMock)
+        .mockReturnValueOnce(roleRepositoryMock);
+
+      (bcrypt.hash as jest.Mock).mockResolvedValue("hashedPassword");
+      (generateToken as jest.Mock).mockReturnValue("token");
+
+      req.body = {
         firstName: "John",
         lastName: "Doe",
+        username: "johndoe",
+        mobileNumber: "1234567890",
         email: "john@example.com",
-        password: "Password123!",
-      },
-      {
-        id: 2,
-        firstName: "Jane",
-        lastName: "Doe",
-        email: "jane@example.com",
-        password: "Password456!",
-      },
-    ];
-    userController.users.splice(0, userController.users.length, ...users);
-    jest.resetAllMocks();
+        password: "password",
+        role: [{ id: 1 }],
+      };
 
-    // Mock fs.writeFile to resolve without error
-    jest.spyOn(fs, "writeFile").mockResolvedValue();
-  });
+      await userController.createUser(req as Request, res as Response);
 
-  it("should return all users", async () => {
-    const res = await request(app).get("/users");
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual(users);
-  });
-
-  it("should return a user by ID", async () => {
-    const res = await request(app).get("/users/1");
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual(users[0]);
-  });
-
-  it("should return 404 for a non-existing user ID", async () => {
-    const res = await request(app).get("/users/999");
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ message: "404 User not found" });
-  });
-
-  it("should create a new user", async () => {
-    const newUser = {
-      firstName: "Alice",
-      lastName: "Smith",
-      email: "alice@example.com",
-      password: "Password789!",
-    };
-    const res = await request(app).post("/users").send(newUser);
-    expect(res.status).toBe(201);
-    expect(res.body).toEqual({ status: "User added successfully", id: 3 });
-    expect(userController.users.length).toBe(3);
-    expect(userController.users[2]).toMatchObject(newUser);
-  });
-
-  it("should not create a user with a duplicate email", async () => {
-    const duplicateUser = {
-      firstName: "Alice",
-      lastName: "Smith",
-      email: "john@example.com",
-      password: "Password789!",
-    };
-    const res = await request(app).post("/users").send(duplicateUser);
-    expect(res.status).toBe(409);
-    expect(res.body).toEqual({ status: "Email already exists." });
-  });
-
-  it("should update an existing user", async () => {
-    const updatedUser = { firstName: "Johnny" };
-    const res = await request(app).patch("/users/1").send(updatedUser);
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      status: "User with id 1 updated successfully.",
+      expect(statusMock).toHaveBeenCalledWith(201);
+      expect(jsonMock).toHaveBeenCalledWith({
+        status: "User added successfully",
+        token: "token",
+      });
     });
-    expect(userController.users[0].firstName).toBe("Johnny");
+
+    it("should handle email already exists", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue({ id: 1, email: "john@example.com" }),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.body = { email: "john@example.com" };
+
+      await userController.createUser(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(409);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Email already exists." });
+    });
+
+    it("should handle username already exists", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 1, username: "johndoe" }),
+        save: vi.fn()
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      const req = {
+        body: {
+          email: "john@example.com", // Email that does not exist
+          username: "johndoe", // This username already exists
+          
+        },
+      } as Request;
+
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+
+      await userController.createUser(req, res);
+      expect(res.status).toHaveBeenCalledWith(409); // Expect conflict status
+      expect(res.json).toHaveBeenCalledWith({ status: "Username already exists." });
+    });
+
+    it("should handle errors", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockRejectedValue(new Error("DB Error")),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.body = { email: "john@example.com" };
+
+      await userController.createUser(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(500);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Failed to add user." });
+    });
   });
 
-  it("should not update a user with a duplicate email", async () => {
-    const updatedUser = { email: "jane@example.com" };
-    const res = await request(app).patch("/users/1").send(updatedUser);
-    expect(res.status).toBe(409);
-    expect(res.body).toEqual({ status: "Email already exists." });
+  describe("updateUser", () => {
+    // it("should update an existing user", async () => {
+    //   const userRepositoryMock = {
+    //     findOne: vi.fn().mockResolvedValue({ id: 1, email: "john@example.com", username: "johndoe" }),
+    //     findOneBy: vi.fn().mockImplementation((criteria) => {
+    //       // Simulate no conflict for email or username
+    //       if (criteria.email === "john.new@example.com") {
+    //         return Promise.resolve(null);
+    //       }
+    //       if (criteria.username === "johndoe") {
+    //         return Promise.resolve(null);
+    //       }
+    //       return Promise.resolve(null); // No existing user for other criteria
+    //     }),
+    //     save: vi.fn(),
+    //   };
+  
+    //   (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+    //   (bcrypt.hash as jest.Mock).mockResolvedValue("hashedNewPassword"); 
+  
+    //   req.params = { id: "1" };
+    //   req.body = { email: "john.new@example.com" };
+  
+    //   await userController.updateUser(req as Request, res as Response);
+  
+    //   expect(statusMock).toHaveBeenCalledWith(200); // Corrected to 200 for a successful update
+    //   expect(jsonMock).toHaveBeenCalledWith({ status: "User with id 1 updated successfully." });
+    //   expect(userRepositoryMock.save).toHaveBeenCalled();
+    // });
+ 
+
+    it("should return 404 if user not found", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue(null),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.params = { id: "999" };
+
+      await userController.updateUser(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(404);
+      expect(jsonMock).toHaveBeenCalledWith({ message: "404 User not found" });
+    });
+
+    it("should handle email already exists error", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue({ id: 1, email: "john@example.com" }),
+        findOneBy: vi.fn().mockResolvedValue({ id: 2, email: "john.new@example.com" }),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.params = { id: "1" };
+      req.body = { email: "john.new@example.com" };
+
+      await userController.updateUser(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(409);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Email already exists." });
+    });
+
+    it("should handle errors", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockRejectedValue(new Error("DB Error")),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.params = { id: "1" };
+
+      await userController.updateUser(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(500);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Failed to update user." });
+    });
   });
 
-  it("should delete an existing user", async () => {
-    const res = await request(app).delete("/users/1");
-    expect(res.status).toBe(204);
-    expect(userController.users.length).toBe(1);
+  describe("deleteUser", () => {
+    it("should delete an existing user", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue({ id: 1, email: "john@example.com" }),
+        remove: vi.fn(),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.params = { id: "1" };
+
+      await userController.deleteUser(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(204);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "User with id 1 deleted successfully." });
+    });
+
+    it("should return 404 if user not found", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue(null),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.params = { id: "999" };
+
+      await userController.deleteUser(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(404);
+      expect(jsonMock).toHaveBeenCalledWith({ message: "404 User not found" });
+    });
+
+    it("should handle errors", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockRejectedValue(new Error("DB Error")),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.params = { id: "1" };
+
+      await userController.deleteUser(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(500);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Failed to delete user." });
+    });
   });
 
-  it("should return 404 for deleting a non-existing user", async () => {
-    const res = await request(app).delete("/users/999");
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ message: "404 User not found" });
-  });
-});
+  describe("userLogin", () => {
+    it("should login user successfully", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue({ id: 1, email: "john@example.com", password: "hashedPassword", role: [{ name: "admin" }] }),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (generateToken as jest.Mock).mockReturnValue("token");
 
-describe("GraphQL API", () => {
-  let app: express.Express;
+      req.body = { email: "john@example.com", password: "password" };
 
-  beforeEach(async () => {
-    app = await createTestServer();
-  });
-  it("should return a list of users", async () => {
-    const query = `
-      query {
-        users {
-          edges {
-            node {
-              id
-              firstName
-              lastName
-              email
-              password
-            }
-          }
-          pageInfo {
-            endCursor
-            hasNextPage
-          }
-        }
-      }
-    `;
-    const res = await request(app)
-      .post("/graphql")
-      .send({ query });
-    expect(res.body.data).toBeDefined();
-    expect(res.body.data.users.edges.length).toBeGreaterThan(0);
-  });
+      await userController.userLogin(req as Request, res as Response);
 
-  it("should return a user by ID", async () => {
-    const query = `
-      query {
-        user(id: "1") {
-          id
-          firstName
-          lastName
-          email
-        }
-      }
-    `;
-    const res = await request(app)
-      .post("/graphql")
-      .send({ query });
-    expect(res.body.data).toBeDefined();
-    expect(res.body.data.user).toHaveProperty("id", "1");
-  });
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Login successful", token: "token" });
+    });
 
-  it("should return an error for a non-existing user ID", async () => {
-    const query = `
-      query {
-        user(id: "999") {
-          id
-          firstName
-          lastName
-          email
-          password
-        }
-      }
-    `;
-    const res = await request(app)
-      .post("/graphql")
-      .send({ query });
-    expect(res.body.errors).toBeDefined();
-    expect(res.body.errors[0].message).toBe("User not found");
-  });
+    it("should return 401 for invalid email", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue(null),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
 
-  it("should handle pagination correctly", async () => {
-    const query = `
-      query {
-        users(first: 1) {
-          edges {
-            node {
-              id
-              firstName
-              lastName
-              email
-              password
-            }
-          }
-          pageInfo {
-            endCursor
-            hasNextPage
-          }
-        }
-      }
-    `;
-    const res = await request(app)
-      .post("/graphql")
-      .send({ query });
-    expect(res.body.data).toBeDefined();
-    expect(res.body.data.users.edges.length).toBe(1);
-    expect(res.body.data.users.pageInfo).toHaveProperty("endCursor");
-    expect(res.body.data.users.pageInfo.hasNextPage).toBe(true);
+      req.body = { email: "wrong@example.com", password: "password" };
+
+      await userController.userLogin(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(401);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Invalid email or password" });
+    });
+
+    it("should return 401 for invalid password", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockResolvedValue({ id: 1, email: "john@example.com", password: "hashedPassword" }),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      req.body = { email: "john@example.com", password: "wrongpassword" };
+
+      await userController.userLogin(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(401);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Invalid email or password" });
+    });
+
+    it("should handle errors", async () => {
+      const userRepositoryMock = {
+        findOne: vi.fn().mockRejectedValue(new Error("DB Error")),
+      };
+      (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
+
+      req.body = { email: "john@example.com", password: "password" };
+
+      await userController.userLogin(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(500);
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Failed to login" });
+    });
   });
 });

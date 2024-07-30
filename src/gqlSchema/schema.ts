@@ -1,15 +1,6 @@
-import userData from "../Mock_Data.json";
+import { AppDataSource } from "../db.config";
+import { User } from "../entity/User";
 import { ApolloError } from "apollo-server-errors";
-
-interface User {
-  id: number;
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-}
-
-const users: User[] = userData as User[];
 
 export const typeDefs = `#graphql
   type User {
@@ -43,25 +34,29 @@ export const typeDefs = `#graphql
 
 export const resolvers = {
   Query: {
-    users: (
+    users: async (
       _: unknown,
       { search = "", first = 10, after }: { search?: string; first?: number; after?: string }
     ) => {
+      const userRepository = AppDataSource.getRepository(User);
+
       // Filter users based on search query
-      let filteredUsers = users.filter((user) =>
-        user.firstName.toLowerCase().includes(search.toLowerCase()) ||
-        user.lastName.toLowerCase().includes(search.toLowerCase()) ||
-        user.email.toLowerCase().includes(search.toLowerCase())
-      );
+      let query = userRepository.createQueryBuilder("user");
+      if(search) {
+        query = query.where(
+          "user.firstName LIKE :search OR user.lastName LIKE:search or user.email LIKE:search",
+          { search: `%${search}%` }
+        );
+      }
+    
 
       // Handle pagination using cursor (after)
       if (after) {
-        const cursorIndex = filteredUsers.findIndex((user) => user.id.toString() === after);
-        filteredUsers = filteredUsers.slice(cursorIndex + 1);
+        query = query.andWhere("user.id > :after", { after });
       }
-
-      // Select the first 'first' number of users after filtering and pagination
-      const selectedUsers = filteredUsers.slice(0, first);
+      
+      //Get users with pagination
+      const [selectedUsers, filteredUsers] = await query.take(first).getManyAndCount();
 
       // Map users to edges for GraphQL response
       const edges = selectedUsers.map((user) => ({
@@ -71,7 +66,7 @@ export const resolvers = {
 
       // Determine endCursor and hasNextPage
       const endCursor = edges.length > 0 ? edges[edges.length - 1].cursor : null;
-      const hasNextPage = filteredUsers.length > first;
+      const hasNextPage = filteredUsers > first;
 
       return {
         edges,
@@ -81,10 +76,11 @@ export const resolvers = {
         },
       };
     },
-    user: (_: unknown, { id }: { id: string }): User | undefined => {
-      // Find a user by ID
-      const user = users.find((user) => user.id.toString() === id);
+    user: async (_: unknown, { id }: { id: string }): Promise <User | undefined> => {
+      const userRepository = AppDataSource.getRepository(User);
 
+      // Find a user by ID
+      const user = await userRepository.findOneBy({ id: parseInt(id) });
       // Throw an error if the user is not found
       if (!user) {
         throw new ApolloError("User not found", "NOT_FOUND", {
