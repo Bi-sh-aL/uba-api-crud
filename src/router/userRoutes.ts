@@ -15,7 +15,7 @@ const router: Router = Router();
 router.get("/users", jwtauth, checkPermission("get_users"), getUsers);
 
 //route to create a new user
-router.post("/users", validate(createUserSchema), createUser);
+router.post("/users/signup", validate(createUserSchema), createUser);
 
 //route to get user by id
 router.get("/users/:id", jwtauth,  getUserById);

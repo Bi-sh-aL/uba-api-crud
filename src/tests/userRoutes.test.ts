@@ -20,7 +20,9 @@ describe("User Controller", () => {
   let jsonMock: jest.Mock;
 
   beforeEach(() => {
-    req = {};
+    req = {
+      query: {}
+    };
     res = {
       status:  vi.fn().mockImplementation(() => res),
       json: vi.fn(),
@@ -34,26 +36,39 @@ describe("User Controller", () => {
   });
 
   describe("getUsers", () => {
-    it("should return an array of users", async () => {
+    it("should return paginated users", async () => {
       const userRepositoryMock = {
-        find: vi.fn().mockResolvedValue([{ id: 1, name: "John Doe" }]),
+        findAndCount: vi.fn().mockResolvedValue([[{ id: 1, name: "John Doe", role: [{ name: "User" }] }], 1]),
       };
       (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
-
+      
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error
+      req.query.page = "1";
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error
+      req.query.limit = "5";
+  
       await userController.getUsers(req as Request, res as Response);
-
+  
       expect(statusMock).not.toHaveBeenCalled();
-      expect(jsonMock).toHaveBeenCalledWith([{ id: 1, name: "John Doe" }]);
+      expect(jsonMock).toHaveBeenCalledWith({
+        data: [{ id: 1, name: "John Doe", role: [{ name: "User" }] }],
+        page: 1,
+        limit: 5,
+        total: 1,
+        totalPages: 1,
+      });
     });
-
+  
     it("should handle errors", async () => {
       const userRepositoryMock = {
-        find: vi.fn().mockRejectedValue(new Error("DB Error")),
+        findAndCount: vi.fn().mockRejectedValue(new Error("DB Error")),
       };
       (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
-
+  
       await userController.getUsers(req as Request, res as Response);
-
+  
       expect(statusMock).toHaveBeenCalledWith(500);
       expect(jsonMock).toHaveBeenCalledWith({ status: "Failed to fetch users." });
     });
@@ -317,7 +332,7 @@ describe("User Controller", () => {
   describe("userLogin", () => {
     it("should login user successfully", async () => {
       const userRepositoryMock = {
-        findOne: vi.fn().mockResolvedValue({ id: 1, email: "john@example.com", password: "hashedPassword", role: [{ name: "admin" }] }),
+        findOne: vi.fn().mockResolvedValue({ id: 1, email: "john@example.com", password: "hashedPassword", role: [{name: "Admin"}]}),
       };
       (AppDataSource.getRepository as jest.Mock).mockReturnValue(userRepositoryMock);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
@@ -328,7 +343,7 @@ describe("User Controller", () => {
       await userController.userLogin(req as Request, res as Response);
 
       expect(statusMock).toHaveBeenCalledWith(200);
-      expect(jsonMock).toHaveBeenCalledWith({ status: "Login successful", token: "token" });
+      expect(jsonMock).toHaveBeenCalledWith({ status: "Login successful", token: "token", role: "Admin" });
     });
 
     it("should return 401 for invalid email", async () => {

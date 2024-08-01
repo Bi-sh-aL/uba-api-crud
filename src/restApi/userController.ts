@@ -10,8 +10,26 @@ import { Role } from "../entity/Role";
 export const getUsers = async (req: Request, res: Response) => {
   try {
     const userRepository = AppDataSource.getRepository(User);
-    const users = await userRepository.find();
-    return res.json(users);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string)  || 5;
+    const offset = (page -1) * limit;
+
+    const [ users, total ] = await userRepository.findAndCount({
+      relations: ["role"],
+      skip: offset,
+      take: limit
+    });
+
+    const totalPages = Math.ceil( total / limit );
+
+    return res.json({
+      data: users,
+      page, 
+      limit,
+      total,
+      totalPages
+    });
+    
   } catch (error) {
     console.error("Error fetching users:", error);
     return res.status(500).json({ status: "Failed to fetch users." });
@@ -42,7 +60,6 @@ export const createUser = async (req: Request, res: Response) => {
     const userRepository = AppDataSource.getRepository(User);
     const roleRepository = AppDataSource.getRepository(Role);
     const body = req.body;
-    const role = body.role;
     const existingEmail = await userRepository.findOne({where: { email: body.email }});
     const existingUsername = await userRepository.findOne({where: { username: body.username }});
     if (existingEmail) {
@@ -54,16 +71,24 @@ export const createUser = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(body.password, 10);
     
-    const roleEntities= await Promise.all(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      role.map(async (value: { id: any; }) => {
-        const roleEntity = await roleRepository.findOne({ where: {id: value.id }});
-        if (!roleEntity) {
-          throw new Error(`Role with id ${value.id} not found`);
-        }
-        return roleEntity;
-      })
-    );
+    let userRole;
+
+    // Check if a specific role is provided
+    if (body.role && Array.isArray(body.role) && body.role.length > 0) {
+      // Attempt to find the specified role
+      userRole = await roleRepository.findOne({ where: { id: body.role[0].id } });
+      if (!userRole) {
+        // Role not found, fallback to default role
+        userRole = await roleRepository.findOne({ where: { name: "User" } });
+      }
+    } else {
+      // No role specified, default to "User"
+      userRole = await roleRepository.findOne({ where: { name: "User" } });
+    }
+
+    if (!userRole) {
+      return res.status(500).json({ status: "Default user role not found." });
+    }
 
     const newUser = userRepository.create({
       firstName: body.firstName,
@@ -72,22 +97,21 @@ export const createUser = async (req: Request, res: Response) => {
       mobileNumber: body.mobileNumber,
       email: body.email,
       password: hashedPassword,
-      role: roleEntities
+      role: [userRole],
     });
-    
+
     await userRepository.save(newUser);
 
     const payload = {
       id: newUser.id,
       email: newUser.email,
-      role: roleEntities
+      role: userRole,
     };
 
     const token = generateToken(payload);
-    
+
     return res.status(201).json({ status: "User added successfully", token });
 
-    
   } catch (error) {
     console.error("Error creating user:", error);
     return res.status(500).json({ status: "Failed to add user." });
@@ -168,14 +192,17 @@ export const userLogin = async (req: Request, res: Response) => {
       return res.status(401).json({ status: "Invalid email or password" });
     }
 
+    // Assuming user.role is an array and you want the first role
+    const userRole = user.role[0]?.name || "User"; // Default to "user" if no role found
+
     const payload = {
       id: user.id,
       email: user.email,
-      role: user.role.map((role) => role.name),
+      role: userRole,
     };  
 
     const token = generateToken(payload);
-    return res.status(200).json({ status: "Login successful", token: token });
+    return res.status(200).json({ status: "Login successful", token: token, role: userRole });
   } catch (error) {
     console.error("Error logging in:", error);
     return res.status(500).json({ status: "Failed to login" });
